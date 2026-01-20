@@ -8,5 +8,12 @@ dependencies = [
 	"google-api-python-client",
 	"google-auth-httplib2",
 	"google-auth-oauthlib",
-    "python-dateutil"
+    "python-dateutil",
+    "pydantic>=2.0",
+    "dateparser",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
 ]
