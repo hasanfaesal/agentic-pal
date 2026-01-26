@@ -1,4 +1,8 @@
-"""Google Calendar service module for adding, deleting, and listing events."""
+"""Google Calendar service module for adding, deleting, and listing events.
+
+Based on Google Workspace API quickstart example:
+https://github.com/googleworkspace/python-samples/tree/main/calendar/quickstart
+"""
 
 from datetime import datetime, timedelta
 from typing import Optional

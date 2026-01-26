@@ -1,4 +1,8 @@
-"""Google Gmail service module for reading, listing, and summarizing emails."""
+"""Google Gmail service module for reading, listing, and summarizing emails.
+
+Based on Google Workspace API quickstart example:
+https://github.com/googleworkspace/python-samples/tree/main/gmail/quickstart
+"""
 
 from datetime import datetime, timedelta
 from typing import Optional

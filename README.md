@@ -76,3 +76,11 @@ To add new tools:
 - langchain-qwq: LLM integration
 - pydantic: Schema validation
 - python-dateutil: Date parsing
+
+## References
+
+This project draws inspiration from the official Google Workspace Python quickstart examples. The quickstart files are not committed to this repository; please refer to the canonical sources below:
+
+- Google Calendar Quickstart: https://developers.google.com/calendar/api/quickstart/python
+- Gmail Quickstart: https://developers.google.com/gmail/api/quickstart/python
+- Google Tasks Quickstart: https://developers.google.com/tasks/quickstart/python

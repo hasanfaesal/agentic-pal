@@ -1,4 +1,8 @@
-"""Google Tasks service module for creating, listing, and managing tasks."""
+"""Google Tasks service module for creating, listing, and managing tasks.
+
+Based on Google Workspace API quickstart example:
+https://github.com/googleworkspace/python-samples/tree/main/tasks/quickstart
+"""
 
 from typing import Optional
 from googleapiclient.errors import HttpError
