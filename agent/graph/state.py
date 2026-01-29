@@ -1,9 +1,12 @@
 """
 State schema for the agent graph.
 Defines the typed state that flows through all nodes.
+
+Uses TypedDict for LangGraph compatibility - allows dictionary-style access
+while maintaining type hints for IDE support.
 """
 
-from typing import List, Optional, Literal, Any, Dict
+from typing import List, Optional, Literal, Any, Dict, TypedDict
 from pydantic import BaseModel, Field, ConfigDict
 import uuid
 
@@ -19,46 +22,79 @@ class Action(BaseModel):
     model_config = ConfigDict(frozen=False)  # Allow mutation of result field
 
 
-class AgentState(BaseModel):
+class AgentState(TypedDict, total=False):
     """
     State that flows through the agent graph.
     
     All nodes read from and write to this state.
-    Uses Pydantic for runtime validation and type safety.
+    Uses TypedDict for LangGraph compatibility - allows dictionary-style
+    access (state["key"] and state.get("key", default)).
+    
+    total=False means all keys are optional by default.
     """
-    # Input
+    # Input (required)
     user_message: str
-    conversation_history: List[Dict[str, Any]] = Field(default_factory=list)
+    conversation_history: List[Dict[str, Any]]
     
     # Planning
-    actions: List[Dict[str, Any]] = Field(default_factory=list)
-    requires_confirmation: bool = False
+    actions: List[Dict[str, Any]]
+    requires_confirmation: bool
     
     # Execution
-    execution_mode: Literal["parallel", "sequential", "confirm"] = "parallel"
-    results: Dict[str, Any] = Field(default_factory=dict)
+    execution_mode: Literal["parallel", "sequential", "confirm"]
+    results: Dict[str, Any]
     
     # Confirmation
-    pending_confirmation: Optional[Dict[str, Any]] = None
-    user_confirmation: Optional[str] = None
-    confirmation_message: Optional[str] = None
+    pending_confirmation: Optional[Dict[str, Any]]
+    user_confirmation: Optional[str]
+    confirmation_message: Optional[str]
     
     # Output
-    final_response: Optional[str] = None
+    final_response: Optional[str]
     
     # Session
-    session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    session_context: Dict[str, Any] = Field(default_factory=dict)
+    session_id: str
+    session_context: Dict[str, Any]
     
     # Tool Discovery (meta-tools)
-    discovered_tools: List[str] = Field(default_factory=list)
-    tool_invocations: List[Dict[str, Any]] = Field(default_factory=list)
+    discovered_tools: List[str]
+    tool_invocations: List[Dict[str, Any]]
     
     # Error Handling
-    error: Optional[str] = None
+    error: Optional[str]
     
-    model_config = ConfigDict(
-        arbitrary_types_allowed=True,  # For LangGraph compatibility
-        validate_assignment=True,      # Validate on field updates
-        frozen=False,                  # Allow mutations
+    # DSPy specific (for debugging)
+    _dspy_reasoning: Optional[str]
+
+
+def create_initial_state(
+    user_message: str,
+    conversation_history: Optional[List[Dict[str, Any]]] = None,
+) -> AgentState:
+    """
+    Create an initial agent state with default values.
+    
+    Args:
+        user_message: The user's input message
+        conversation_history: Optional conversation history
+        
+    Returns:
+        Initialized AgentState dictionary
+    """
+    return AgentState(
+        user_message=user_message,
+        conversation_history=conversation_history or [],
+        actions=[],
+        requires_confirmation=False,
+        execution_mode="parallel",
+        results={},
+        pending_confirmation=None,
+        user_confirmation=None,
+        confirmation_message=None,
+        final_response=None,
+        session_id=str(uuid.uuid4()),
+        session_context={},
+        discovered_tools=[],
+        tool_invocations=[],
+        error=None,
     )

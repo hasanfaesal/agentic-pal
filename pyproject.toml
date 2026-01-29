@@ -14,6 +14,7 @@ dependencies = [
 	"dashscope>=1.25.8",
 	"langchain-qwq>=0.3.4",
 	"langchain-community>=0.4.1",
+	"dspy>=2.5.0",
 ]
 
 [project.optional-dependencies]

@@ -77,6 +77,7 @@ def execute_tools_parallel(state: AgentState, tool_executor) -> AgentState:
     Execute all actions in parallel using ThreadPoolExecutor.
     
     Used when actions are independent (no depends_on).
+    Skips actions that already have results (from plan_actions).
     
     Args:
         state: Current agent state
@@ -91,11 +92,18 @@ def execute_tools_parallel(state: AgentState, tool_executor) -> AgentState:
     if not actions:
         return {**state, "results": results}
     
-    # Execute all tools in parallel using ThreadPoolExecutor
+    # Filter out actions that already have results (executed in plan_actions)
+    actions_to_execute = [a for a in actions if a["id"] not in results]
+    
+    if not actions_to_execute:
+        # All actions already executed in plan_actions
+        return {**state, "results": results}
+    
+    # Execute remaining tools in parallel using ThreadPoolExecutor
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         futures = {}
         
-        for action in actions:
+        for action in actions_to_execute:
             future = executor.submit(
                 tool_executor,
                 action["tool"],
@@ -128,6 +136,7 @@ def execute_tools_sequential(state: AgentState, tool_executor) -> AgentState:
     Execute actions sequentially respecting dependencies.
     
     Used when actions have depends_on relationships.
+    Skips actions that already have results (from plan_actions).
     
     Args:
         state: Current agent state
@@ -145,8 +154,12 @@ def execute_tools_sequential(state: AgentState, tool_executor) -> AgentState:
     # Sort actions by dependencies
     sorted_actions = _topological_sort(actions)
     
-    # Execute in order
+    # Execute in order, skipping actions that already have results
     for action in sorted_actions:
+        # Skip if already executed in plan_actions
+        if action["id"] in results:
+            continue
+            
         # Inject results from dependencies
         resolved_action = _inject_dependencies(action, results)
         
