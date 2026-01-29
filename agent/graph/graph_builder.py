@@ -2,22 +2,18 @@
 Main graph builder.
 Assembles all nodes and edges into the complete agent graph.
 
-Supports two modes:
-1. Legacy mode: Load filtered tools upfront based on category classification
-2. Lazy loading mode: Use meta-tools (discover, schema, invoke) for dynamic discovery
-
-Lazy loading reduces token usage
+Uses meta-tools (discover, schema, invoke) for dynamic tool discovery.
+This reduces token usage by ~96% compared to loading all tools upfront.
 """
 
 from typing import Literal
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
+from functools import partial
 
 from .state import AgentState
 from .nodes import (
-    classify_intent,
     plan_actions,
-    plan_actions_with_meta_tools,
     route_execution,
     execute_tools_parallel,
     execute_tools_sequential,
@@ -25,15 +21,13 @@ from .nodes import (
     process_confirmation,
     synthesize_response,
 )
-from .edges.routers import route_after_planning, route_after_confirm
-from ..tools.tool_definitions import get_tools_for_categories
-from functools import partial
+from .edges.routers import route_after_confirm
+
 
 def build_agent_graph(
     tools_registry,
     llm,
     checkpointer=None,
-    use_lazy_loading: bool = True,
 ):
     """
     Build the complete agent graph.
@@ -42,8 +36,6 @@ def build_agent_graph(
         tools_registry: AgentTools instance with tool registry
         llm: LLM instance for planning and synthesis
         checkpointer: Optional checkpointer for persistence (default: MemorySaver)
-        use_lazy_loading: If True, use meta-tools for dynamic tool discovery (default)
-                         If False, use legacy mode with upfront tool loading
         
     Returns:
         Compiled graph ready for invocation
@@ -51,7 +43,7 @@ def build_agent_graph(
     from ..tools.meta_tools import MetaTools
     
     # Create meta-tools for lazy loading
-    meta_tools = MetaTools(tools_registry) if use_lazy_loading else None
+    meta_tools = MetaTools(tools_registry)
     
     # ─────────────────────────────────────────────────────────────────────
     # Build the graph
@@ -59,12 +51,11 @@ def build_agent_graph(
     
     graph = StateGraph(AgentState)
     
-    # Add nodes - using partial for dependency injection, direct refs otherwise
-    graph.add_node("classify_intent", classify_intent)
-    graph.add_node("plan_actions", partial(plan_actions_with_meta_tools, meta_tools=meta_tools, llm=llm) if use_lazy_loading else partial(plan_actions, llm=llm))
+    # Add nodes
+    graph.add_node("plan_actions", partial(plan_actions, meta_tools=meta_tools, llm=llm))
     graph.add_node("route_execution", route_execution)
-    graph.add_node("execute_parallel", partial(execute_tools_parallel, execute_fn=tools_registry.execute_tool))
-    graph.add_node("execute_sequential", partial(execute_tools_sequential, execute_fn=tools_registry.execute_tool))
+    graph.add_node("execute_parallel", partial(execute_tools_parallel, tool_executor=tools_registry.execute_tool))
+    graph.add_node("execute_sequential", partial(execute_tools_sequential, tool_executor=tools_registry.execute_tool))
     graph.add_node("confirm_actions", confirm_actions)
     graph.add_node("process_confirmation", process_confirmation)
     graph.add_node("synthesize_response", partial(synthesize_response, llm=llm))
@@ -73,11 +64,10 @@ def build_agent_graph(
     # Add edges
     # ─────────────────────────────────────────────────────────────────────
     
-    # Entry point
-    graph.set_entry_point("classify_intent")
+    # Entry point - start directly at plan_actions
+    graph.set_entry_point("plan_actions")
     
-    # Linear edges
-    graph.add_edge("classify_intent", "plan_actions")
+    # Linear edge
     graph.add_edge("plan_actions", "route_execution")
     
     # Conditional routing after route_execution
@@ -149,7 +139,6 @@ def create_graph_runner(
     tasks_service,
     model_name: str = "qwen-plus-2025-01-01",
     default_timezone: str = "UTC",
-    use_lazy_loading: bool = True,
 ):
     """
     Create a complete graph runner with all dependencies.
@@ -160,7 +149,6 @@ def create_graph_runner(
         tasks_service: TasksService instance
         model_name: LLM model name
         default_timezone: Default timezone for date parsing
-        use_lazy_loading: Use meta-tools for ~96% token reduction (default: True)
         
     Returns:
         Tuple of (compiled_graph, tools_registry)
@@ -180,10 +168,6 @@ def create_graph_runner(
     )
     
     # Build graph
-    graph = build_agent_graph(
-        tools_registry, 
-        llm, 
-        use_lazy_loading=use_lazy_loading,
-    )
+    graph = build_agent_graph(tools_registry, llm)
     
     return graph, tools_registry

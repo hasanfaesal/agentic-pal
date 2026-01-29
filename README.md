@@ -32,6 +32,24 @@ Three-layer design for clean separation of concerns:
 
 Tool execution flows from user input through the agent, validated by the registry, wrapped by tool handlers, and executed by service classes.
 
+## Graph
+(classify_intent)
+      |
+      v
+ (plan_actions)
+      |
+      v
+(route_execution)
+   |      \
+   |       \
+confirm_actions   execute_sequential   execute_parallel
+   |                    |                    |
+   |<----(depends_on)----|                    |
+   |                                         |
+   +------------> synthesize_response <------+
+                         |
+                        END
+
 ## Getting Started
 
 ### Requirements

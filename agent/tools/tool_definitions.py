@@ -208,7 +208,7 @@ for name, defn in TOOL_DEFINITIONS.items():
     for action in defn.actions:
         BY_ACTION.setdefault(action, []).append(name)
 
-# Reverse mapping: tool_name -> category (for legacy compatibility)
+# Reverse mapping: tool_name -> category
 TOOL_TO_CATEGORY: Dict[str, str] = {
     name: defn.category for name, defn in TOOL_DEFINITIONS.items()
 }

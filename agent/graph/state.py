@@ -30,9 +30,6 @@ class AgentState(BaseModel):
     user_message: str
     conversation_history: List[Dict[str, Any]] = Field(default_factory=list)
     
-    # Classification
-    tool_categories: List[str] = Field(default_factory=list)
-    
     # Planning
     actions: List[Dict[str, Any]] = Field(default_factory=list)
     requires_confirmation: bool = False
@@ -53,8 +50,7 @@ class AgentState(BaseModel):
     session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     session_context: Dict[str, Any] = Field(default_factory=dict)
     
-    # Lazy Loading
-    use_lazy_loading: bool = True
+    # Tool Discovery (meta-tools)
     discovered_tools: List[str] = Field(default_factory=list)
     tool_invocations: List[Dict[str, Any]] = Field(default_factory=list)
     
