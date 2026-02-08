@@ -346,6 +346,9 @@ class SessionManager:
     # Thread Management
     # =========================================================================
     
+    PENDING_MESSAGE_PREFIX = "pending_msg:"
+    PENDING_MESSAGE_TTL = 300  # 5 minutes — message must be streamed within this window
+    
     async def add_thread_to_session(self, session_id: str, thread_id: str) -> None:
         """
         Add a conversation thread ID to a session.
@@ -358,6 +361,53 @@ class SessionManager:
         if session and thread_id not in session.thread_ids:
             session.thread_ids.append(thread_id)
             await self.update_session(session)
+    
+    async def track_thread(self, session_id: str, thread_id: str) -> None:
+        """
+        Alias for add_thread_to_session.
+        
+        Args:
+            session_id: Session identifier.
+            thread_id: Thread identifier to track.
+        """
+        await self.add_thread_to_session(session_id, thread_id)
+    
+    async def store_pending_message(self, thread_id: str, user_message: str) -> None:
+        """
+        Store a user message in Redis awaiting SSE stream processing.
+        
+        The message is stored with a short TTL — the client must open
+        the SSE stream within this window.
+        
+        Args:
+            thread_id: Thread identifier.
+            user_message: The user's message text.
+        """
+        await self.connect()
+        await self.redis.setex(
+            f"{self.PENDING_MESSAGE_PREFIX}{thread_id}",
+            self.PENDING_MESSAGE_TTL,
+            user_message
+        )
+    
+    async def get_pending_message(self, thread_id: str) -> Optional[str]:
+        """
+        Retrieve and delete the pending user message for a thread.
+        
+        Uses GETDEL to atomically read and remove the message,
+        preventing the same message from being processed twice.
+        
+        Args:
+            thread_id: Thread identifier.
+            
+        Returns:
+            The user's message if found, None otherwise.
+        """
+        await self.connect()
+        key = f"{self.PENDING_MESSAGE_PREFIX}{thread_id}"
+        # GETDEL atomically retrieves and deletes the key
+        message = await self.redis.getdel(key)
+        return message
 
 
 # =============================================================================

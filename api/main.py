@@ -49,6 +49,8 @@ from api.schemas import (
     ConfirmActionRequest,
     ErrorResponse,
     HealthCheck,
+    SendMessageRequest,
+    SendMessageResponse,
     StreamEvent,
     StreamEventType,
 )
@@ -293,11 +295,59 @@ async def chat(
 
 
 # =============================================================================
-# SSE Streaming Endpoint
+# Chat Message Endpoint (Step 1: Store message)
 # =============================================================================
 
 
 @app.post(
+    "/chat/message",
+    response_model=SendMessageResponse,
+    responses={
+        200: {"description": "Message stored, ready to stream"},
+        401: {"model": ErrorResponse, "description": "Not authenticated"},
+        429: {"description": "Rate limit exceeded"},
+        500: {"model": ErrorResponse, "description": "Server error"}
+    },
+    tags=["Chat"],
+    summary="Store a user message for streaming (Step 1)"
+)
+@limiter.limit(get_rate_limit())
+async def send_message(
+    request: Request,
+    msg_request: SendMessageRequest,
+    session: Annotated[Any, Depends(get_current_session)],
+):
+    """
+    Store the user's message server-side and return a thread_id.
+    
+    This is Step 1 of the two-step streaming pattern:
+    1. POST /chat/message — stores the message, returns thread_id
+    2. GET /chat/stream?thread_id=... — opens SSE, agent processes and streams response
+    
+    The message is stored in the session manager (Redis) so the stream
+    endpoint can retrieve it without the user sending it via URL.
+    """
+    thread_id = msg_request.thread_id or generate_thread_id()
+    
+    # Track thread in session
+    session_manager = get_session_manager()
+    await session_manager.track_thread(session.session_id, thread_id)
+    
+    # Store the pending message in Redis so /chat/stream can retrieve it
+    await session_manager.store_pending_message(thread_id, msg_request.user_message)
+    
+    return SendMessageResponse(
+        thread_id=thread_id,
+        status="queued"
+    )
+
+
+# =============================================================================
+# SSE Streaming Endpoint (Step 2: Stream response)
+# =============================================================================
+
+
+@app.get(
     "/chat/stream",
     responses={
         200: {"description": "Streaming response with SSE"},
@@ -311,31 +361,49 @@ async def chat(
 @limiter.limit(get_rate_limit())
 async def chat_stream(
     request: Request,
-    chat_request: ChatStreamRequest,
+    thread_id: str,
     session: Annotated[Any, Depends(get_current_session)],
     graph_and_tools: Annotated[Any, Depends(get_agent_graph)],
 ):
     """
-    Stream a message to the agent and receive a streaming response via SSE.
+    Stream the agent's response via SSE.
+    
+    This is Step 2 of the two-step streaming pattern:
+    1. POST /chat/message — stores the message, returns thread_id
+    2. GET /chat/stream?thread_id=... — opens SSE, agent processes and streams response
+    
+    The backend retrieves the pending user message from Redis using thread_id.
+    Conversation history is reconstructed from backend state (Redis checkpoints).
+    No sensitive data is sent via URL — only the thread_id.
+    
+    Query params:
+        thread_id: Thread ID returned by POST /chat/message
     
     Returns: text/event-stream with Server-Sent Events
     """
     graph, tools_registry = graph_and_tools
     
+    # Retrieve the pending message from Redis
+    session_manager = get_session_manager()
+    user_message = await session_manager.get_pending_message(thread_id)
+    
+    if not user_message:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "no_pending_message",
+                "message": "No pending message found for this thread. Send a message via POST /chat/message first."
+            }
+        )
+    
     async def event_generator():
         """Generate SSE events from the agent stream."""
-        thread_id = chat_request.thread_id or generate_thread_id()
-        
-        # Track thread in session
-        session_manager = get_session_manager()
-        await session_manager.track_thread(session.session_id, thread_id)
-        
         try:
             # Stream events from graph
             async for event in graph.astream_events(
                 {
-                    "user_message": chat_request.user_message,
-                    "conversation_history": chat_request.conversation_history or [],
+                    "user_message": user_message,
+                    "conversation_history": [],
                 },
                 {"configurable": {"thread_id": thread_id}},
                 version="v2"

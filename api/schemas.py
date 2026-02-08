@@ -120,7 +120,7 @@ class StreamEvent(BaseModel):
 
 
 class ChatStreamRequest(BaseModel):
-    """Request body for /chat/stream endpoint (SSE)."""
+    """Request body for /chat/stream endpoint (SSE). DEPRECATED — stream now uses GET with thread_id only."""
     
     user_message: str = Field(
         ...,
@@ -136,6 +136,35 @@ class ChatStreamRequest(BaseModel):
     conversation_history: Optional[List[Dict[str, Any]]] = Field(
         default_factory=list,
         description="Optional conversation history for context"
+    )
+
+
+class SendMessageRequest(BaseModel):
+    """Request body for POST /chat/message — stores the user's message server-side."""
+    
+    user_message: str = Field(
+        ...,
+        description="The user's message/query to the agent",
+        min_length=1,
+        max_length=10000,
+        examples=["What meetings do I have tomorrow?"]
+    )
+    thread_id: Optional[str] = Field(
+        None,
+        description="Optional thread ID for conversation continuity. If not provided, a new thread is created."
+    )
+
+
+class SendMessageResponse(BaseModel):
+    """Response body for POST /chat/message — confirms message was stored."""
+    
+    thread_id: str = Field(
+        ...,
+        description="Thread ID to use when opening the SSE stream"
+    )
+    status: str = Field(
+        default="queued",
+        description="Message status (queued for agent processing)"
     )
 
 
